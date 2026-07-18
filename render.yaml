@@ -1,14 +1,10 @@
 services:
   - type: web
     name: meeting-translator-api
-    runtime: python
+    runtime: docker
     plan: free
-    buildCommand: python -m pip install --upgrade pip && python -m pip install -r requirements-render.txt
-    startCommand: python -m apps.api.main
+    dockerfilePath: ./Dockerfile
     healthCheckPath: /health
     envVars:
-      - key: PYTHON_VERSION
-        value: 3.11.9
       - key: APP_PROFILE
         value: demo
-

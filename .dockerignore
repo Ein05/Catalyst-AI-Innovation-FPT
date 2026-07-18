@@ -1,0 +1,12 @@
+.git
+.venv
+venv
+__pycache__
+*.pyc
+data/sessions/*
+data/glossary/*
+Fontend/translator-app/node_modules
+Fontend/translator-app/dist
+.env
+.env.local
+

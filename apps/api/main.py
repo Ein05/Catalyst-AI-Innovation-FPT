@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from apps.api.routes.debug import router as debug_router
 from apps.api.websocket import WebSocketEndpoint
@@ -11,6 +15,10 @@ from core.observability.metrics import MetricsRegistry
 from core.session.manager import SessionManager
 from core.session.storage import SessionStorage
 from core.translation.service import TranslationService
+
+
+ROOT = Path(__file__).resolve().parents[2]
+FRONTEND_DIST = ROOT / "Fontend" / "translator-app" / "dist"
 
 
 def create_app() -> FastAPI:
@@ -46,6 +54,22 @@ def create_app() -> FastAPI:
     @app.websocket("/ws/ws")
     async def websocket_endpoint_compat(websocket: WebSocket) -> None:
         await _handle_websocket(websocket)
+
+    if FRONTEND_DIST.exists():
+        assets_dir = FRONTEND_DIST / "assets"
+        if assets_dir.exists():
+            app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+
+        @app.get("/")
+        async def frontend_index() -> FileResponse:
+            return FileResponse(FRONTEND_DIST / "index.html")
+
+        @app.get("/{full_path:path}")
+        async def frontend_spa_fallback(full_path: str) -> FileResponse:
+            candidate = FRONTEND_DIST / full_path
+            if candidate.is_file():
+                return FileResponse(candidate)
+            return FileResponse(FRONTEND_DIST / "index.html")
 
     return app
 

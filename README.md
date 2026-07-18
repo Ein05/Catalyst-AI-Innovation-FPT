@@ -4,7 +4,7 @@ Backend + frontend app for a real-time Vietnamese-English meeting translator.
 
 - Backend: Python, FastAPI, WebSocket.
 - Frontend: React, Vite, TypeScript, Tailwind.
-- Stable public deploy for demo: Render for backend, Vercel for frontend.
+- Stable public deploy for demo: one Render web service serving both frontend and backend.
 
 Current demo mode uses `MockASRProvider` so the deployed app can run without heavy speech models. The real model wrappers are already in the repo and can be enabled later.
 
@@ -16,6 +16,7 @@ core/                      Backend core modules
 config/                    YAML profiles
 Fontend/translator-app/    React Vite frontend
 requirements-render.txt    Lightweight backend deps for Render demo
+Dockerfile                 Builds frontend and runs backend in one container
 render.yaml                Optional Render Blueprint config
 ```
 
@@ -71,9 +72,33 @@ In local dev, Vite proxies:
 - `/health` to `http://127.0.0.1:8000/health`
 - `/debug` to `http://127.0.0.1:8000/debug`
 
-## Deploy Backend To Render
+## Deploy Everything To Render
 
-Render is the backend host because it supports long-running FastAPI web services and public WebSocket connections. Render web services must bind to `0.0.0.0` and should use the `PORT` env var. This app already does that in `apps/api/main.py`. Render also supports WebSockets on web services. Sources: Render Web Services docs and Render WebSocket docs.
+This is the recommended demo deployment. Render will build the React frontend, copy `dist` into the backend image, and FastAPI will serve both the UI and API from one public URL.
+
+After this change, opening the Render root URL shows the UI instead of `404`.
+
+### Option A: Existing Render Service
+
+If you already created a Python Render service, change these settings:
+
+```text
+Runtime: Docker
+Dockerfile Path: ./Dockerfile
+Health Check Path: /health
+```
+
+Environment variables:
+
+```text
+APP_PROFILE=demo
+```
+
+Then redeploy the service.
+
+### Option B: New Render Service
+
+Render supports long-running web services and WebSocket connections. The app binds to `0.0.0.0` and reads the `PORT` env var in `apps/api/main.py`.
 
 Recommended quick deploy:
 
@@ -86,16 +111,14 @@ Recommended quick deploy:
 ```text
 Name: meeting-translator-api
 Root Directory: leave empty
-Runtime: Python
-Build Command: python -m pip install --upgrade pip && python -m pip install -r requirements-render.txt
-Start Command: python -m apps.api.main
+Runtime: Docker
+Dockerfile Path: ./Dockerfile
 Health Check Path: /health
 ```
 
 Environment variables on Render:
 
 ```text
-PYTHON_VERSION=3.11.9
 APP_PROFILE=demo
 ```
 
@@ -105,11 +128,13 @@ Optional, only if using cloud translation:
 ANTHROPIC_API_KEY=your_api_key_here
 ```
 
-After deploy, Render gives a backend URL like:
+After deploy, Render gives a public URL like:
 
 ```text
 https://meeting-translator-api.onrender.com
 ```
+
+Open that URL directly. It should show the React UI.
 
 Check:
 
@@ -129,9 +154,9 @@ WebSocket URL:
 wss://meeting-translator-api.onrender.com/ws
 ```
 
-## Deploy Frontend To Vercel
+## Optional: Deploy Frontend To Vercel
 
-Vercel is the frontend host. Vite exposes client-side env vars only when they are prefixed with `VITE_`, so the frontend uses `VITE_API_URL` and `VITE_WS_URL`.
+You do not need Vercel if using the Docker Render deploy above. Keep this only if you want separate frontend/backend hosting. Vite exposes client-side env vars only when they are prefixed with `VITE_`, so the frontend uses `VITE_API_URL` and `VITE_WS_URL`.
 
 1. Open Vercel Dashboard.
 2. Import the same GitHub repo.
@@ -169,23 +194,21 @@ https://translator-app.vercel.app
 
 This is the public link to send to users.
 
-## Deploy Order
+## Deploy Order For Single Render Service
 
 Use this order:
 
-1. Deploy backend on Render.
-2. Open `/health` on the Render URL and confirm it returns `ok`.
-3. Copy the Render backend URL.
-4. Deploy frontend on Vercel with `VITE_API_URL` and `VITE_WS_URL`.
-5. Open the Vercel frontend URL.
-6. Click `Start Meeting`.
+1. Push the Dockerfile changes to GitHub.
+2. Set Render service runtime to Docker.
+3. Redeploy.
+4. Open `https://meeting-translator-api.onrender.com`.
+5. Click `Start Meeting`.
 
 If the frontend shows `BACKEND OFFLINE`, check these first:
 
-- `VITE_API_URL` must be the Render HTTPS URL.
-- `VITE_WS_URL` must start with `wss://`, not `ws://`.
+- Open `/health` on the same Render URL.
 - Render backend might be sleeping on free plan; open `/health` once and wait for it to wake up.
-- Redeploy Vercel after changing env vars. Vite env vars are baked into the build.
+- Make sure the service was redeployed after switching to Docker runtime.
 
 ## Model Setup
 
@@ -385,4 +408,3 @@ python -m pip install pytest pytest-asyncio
 python -m pytest
 python -m py_compile apps\api\main.py core\config.py
 ```
-

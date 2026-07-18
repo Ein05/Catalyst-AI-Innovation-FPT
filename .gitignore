@@ -7,6 +7,10 @@ venv/
 .env
 .env.local
 .env.*.local
+node_modules/
+dist/
+Fontend/translator-app/node_modules/
+Fontend/translator-app/dist/
 data/sessions/*
 !data/sessions/.gitkeep
 data/glossary/*
