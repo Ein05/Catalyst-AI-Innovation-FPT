@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+*.sqlite3
+*.jsonl
+.venv/
+venv/
+.env
+data/sessions/*
+!data/sessions/.gitkeep
+data/glossary/*
+!data/glossary/.gitkeep
+models/
+.pytest_cache/
+

@@ -1,0 +1,8 @@
+[
+  {"category": "Greeting", "source_language": "vi", "target_language": "en", "text": "Xin chao, chung toi den tu FPT.", "entities": ["FPT"]},
+  {"category": "Pricing", "source_language": "vi", "target_language": "en", "text": "Gia de xuat la 25,000 SGD.", "entities": ["25,000", "SGD"]},
+  {"category": "Delivery", "source_language": "en", "target_language": "vi", "text": "We cannot deliver before Friday.", "negative": true},
+  {"category": "Contract", "source_language": "vi", "target_language": "en", "text": "Hai ben se ky bien ban ghi nho trong Q4.", "entities": ["Q4"]},
+  {"category": "Security", "source_language": "en", "target_language": "vi", "text": "NTU requires data to stay local.", "entities": ["NTU"]}
+]
+
