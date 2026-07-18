@@ -22,7 +22,7 @@ const SESSION_ID = `meeting-${Date.now()}`;
 
 function getWsUrl() {
   const explicit = import.meta.env.VITE_WS_URL as string | undefined;
-  if (explicit) return explicit;
+  if (explicit) return explicit.endsWith('/ws') ? explicit : `${explicit.replace(/\/$/, '')}/ws`;
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   return `${protocol}//${window.location.host}/ws`;
 }
@@ -33,6 +33,7 @@ export default function App() {
   const [connection, setConnection] = useState<'disconnected' | 'connecting' | 'connected'>(
     'disconnected',
   );
+  const [backendOnline, setBackendOnline] = useState(false);
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedMic, setSelectedMic] = useState('');
   const [originalText, setOriginalText] = useState('');
@@ -51,11 +52,16 @@ export default function App() {
   const sequenceRef = useRef(0);
 
   const providerBadge = useMemo(() => {
-    if (connection !== 'connected') return 'BACKEND OFFLINE';
-    return warnings.length ? 'CHECK WARNINGS' : 'LOCAL/CLOUD READY';
-  }, [connection, warnings.length]);
+    if (connection === 'connected') return warnings.length ? 'CHECK WARNINGS' : 'SESSION LIVE';
+    if (backendOnline) return 'BACKEND ONLINE';
+    return 'BACKEND OFFLINE';
+  }, [backendOnline, connection, warnings.length]);
 
   useEffect(() => {
+    fetch('/health')
+      .then((response) => setBackendOnline(response.ok))
+      .catch(() => setBackendOnline(false));
+
     navigator.mediaDevices
       ?.enumerateDevices()
       .then((items) => {

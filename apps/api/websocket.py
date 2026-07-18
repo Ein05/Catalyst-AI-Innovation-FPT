@@ -24,7 +24,6 @@ from core.session.routing import resolve_language_direction
 from core.session.storage import SessionStorage
 from core.session.state import UtteranceStatus
 from core.translation.service import TranslationService
-from core.session.state import SessionMode
 
 
 class WebSocketEndpoint:
@@ -40,20 +39,35 @@ class WebSocketEndpoint:
 
     async def handle(self, websocket: WebSocket) -> None:
         await websocket.accept()
+        connected = True
 
         async def publish(event: ServerEvent) -> None:
+            nonlocal connected
+            if not connected:
+                return
             self.storage.append_event(event)
-            await websocket.send_json(event.serialize())
+            try:
+                await websocket.send_json(event.serialize())
+            except (RuntimeError, WebSocketDisconnect):
+                connected = False
 
         try:
-            while True:
+            while connected:
                 message = await websocket.receive()
+                if message.get("type") == "websocket.disconnect":
+                    connected = False
+                    break
                 if "text" in message and message["text"] is not None:
                     await self._handle_text(message["text"], publish)
                 elif "bytes" in message and message["bytes"] is not None:
                     await self._handle_audio(message["bytes"], publish)
-        except WebSocketDisconnect:
-            return
+        except (RuntimeError, WebSocketDisconnect):
+            connected = False
+        finally:
+            for session_id, task in list(self._tasks.items()):
+                self.manager.end_session(session_id)
+                task.cancel()
+                self._tasks.pop(session_id, None)
 
     async def _handle_text(self, text: str, publish) -> None:
         try:

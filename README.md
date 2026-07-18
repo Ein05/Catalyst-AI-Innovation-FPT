@@ -1,56 +1,316 @@
 # Real-Time Vietnamese-English Meeting Translator
 
-Backend implementation for a product-oriented meeting translator. The codebase focuses on the backend only, per project scope: FastAPI, WebSocket protocol, session orchestration, audio preprocessing, VAD, ASR interface, translation providers, glossary/entity guardrails, privacy-aware storage, observability, scripts, and tests.
+Ứng dụng dịch họp thời gian thực Việt-Anh gồm:
 
-## Backend Quick Start
+- Backend: Python + FastAPI + WebSocket.
+- Frontend: React + Vite + TypeScript trong `Fontend/translator-app`.
+- Public sharing: dùng ngrok expose một port frontend, Vite proxy `/ws`, `/health`, `/debug` về backend.
+
+> Trạng thái hiện tại: app đã nối frontend-backend và chạy được demo protocol. ASR thật bằng Whisper/VAD/model dịch local đã có wrapper nhưng WebSocket demo hiện đang dùng mock ASR để chạy nhẹ, không cần tải model nặng.
+
+## 1. Chạy Backend
+
+Từ root repo:
 
 ```powershell
+cd D:\Work\HackerThonFpt
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -e .[dev]
+python -m pip install --upgrade pip
+python -m pip install fastapi "uvicorn[standard]" pydantic PyYAML httpx numpy scipy
 python -m apps.api.main
 ```
 
-API defaults to `http://127.0.0.1:8000`.
+Backend chạy tại:
 
-Useful endpoints:
+```text
+http://127.0.0.1:8000
+```
+
+Kiểm tra:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/health
+```
+
+Endpoint chính:
 
 - `GET /health`
 - `GET /debug`
 - `WS /ws`
+- `WS /ws/ws` compatibility route
 
-Profiles:
+Nếu port `8000` bị chiếm:
+
+```powershell
+netstat -ano | Select-String ':8000'
+Stop-Process -Id <PID_8000>
+```
+
+## 2. Chạy Frontend
+
+Mở terminal khác:
+
+```powershell
+cd D:\Work\HackerThonFpt\Fontend\translator-app
+npm install
+npm run dev -- --host 0.0.0.0
+```
+
+Frontend chạy tại:
+
+```text
+http://127.0.0.1:5173
+```
+
+Vite config đã proxy:
+
+- `/ws` -> `ws://127.0.0.1:8000/ws`
+- `/health` -> `http://127.0.0.1:8000/health`
+- `/debug` -> `http://127.0.0.1:8000/debug`
+
+Vì vậy frontend và backend có thể public qua một link duy nhất.
+
+Nếu port `5173` bị chiếm:
+
+```powershell
+netstat -ano | Select-String ':5173'
+Stop-Process -Id <PID_5173>
+```
+
+## 3. Public Link Cho Người Khác Dùng
+
+Cách đơn giản nhất hiện tại là ngrok:
+
+```powershell
+ngrok http 5173
+```
+
+Ngrok sẽ in ra một HTTPS URL, ví dụ:
+
+```text
+https://xxxx.ngrok-free.dev
+```
+
+Gửi link đó cho người dùng bên thứ ba. Họ có thể vào từ máy khác, miễn là:
+
+- Máy chạy app vẫn bật.
+- Backend vẫn chạy.
+- Frontend vẫn chạy.
+- Ngrok vẫn chạy.
+
+Lưu ý: ngrok free thường hiện trang cảnh báo/trust page lần đầu. Người dùng chỉ cần bấm tiếp để vào app. Mỗi lần restart ngrok free có thể đổi link.
+
+## 4. Cấu Hình Profile
+
+Config nằm trong:
+
+- `config/default.yaml`
+- `config/demo.yaml`
+- `config/offline.yaml`
+
+Chạy profile offline:
 
 ```powershell
 $env:APP_PROFILE="offline"
 python -m apps.api.main
 ```
 
-Config files live in `config/default.yaml`, `config/demo.yaml`, and `config/offline.yaml`. Nested overrides use `APP_SECTION__FIELD`, for example `APP_TRANSLATION__TIMEOUT_MS=3000`.
+Override config bằng env:
 
-## Implemented Backend Scope
+```powershell
+$env:APP_TRANSLATION__TIMEOUT_MS="3000"
+```
 
-- FastAPI app with WebSocket control/audio protocol.
-- Pydantic config loader and language registry.
-- Session manager with allowed utterance lifecycle:
-  `created -> recording -> transcribing -> transcript_final -> translating -> completed`, or `failed`.
-- Bounded priority queues that drop partial jobs before final jobs.
-- Audio preprocessing: PCM16LE conversion, mono mix, resampling, high-pass filter.
-- VAD state machine with hysteresis, speech padding, and hard cutoff support.
-- Turn segmentation rules for silence, punctuation boundary, duration, language/speaker change, and manual end turn.
-- ASR provider interface plus `faster-whisper` lazy wrapper and mock provider.
-- Translation provider interface plus Anthropic `/v1/messages` provider and local model fallback.
-- Entity protection/restoration, glossary longest-match-first matching, stable-prefix algorithm.
-- Validators for missing entities, possible negation loss, and possible added content.
-- Circuit breaker for cloud translation fallback.
-- SQLite transcript metadata and JSONL event log, respecting privacy config.
-- `/debug` route with queue and metrics snapshot.
-- Preflight, model download placeholder, benchmark placeholder, demo runner.
-- Unit tests for config, protocol events, session transitions, audio, VAD/segmentation, queue behavior, translation guardrails.
+## 5. Bật Model Thật
 
-## WebSocket Contract
+### ASR thật: faster-whisper
 
-Client sends JSON control messages:
+Cài dependency:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+python -m pip install faster-whisper torch underthesea
+```
+
+Model config ở `config/default.yaml`:
+
+```yaml
+asr:
+  provider: faster_whisper
+  model: medium
+  device: auto
+  compute_type: auto
+```
+
+Gợi ý model:
+
+- CPU/demo nhẹ: `small` hoặc `base`
+- GPU 6-8GB: `medium`
+- GPU 12GB+: `large-v3`
+
+Wrapper đã có ở:
+
+```text
+core/asr/faster_whisper.py
+```
+
+Hiện WebSocket demo đang dùng mock ASR tại:
+
+```python
+self.asr = MockASRProvider()
+```
+
+trong:
+
+```text
+apps/api/websocket.py
+```
+
+Để dùng Whisper thật, đổi sang provider factory hoặc thay bằng:
+
+```python
+from core.asr.faster_whisper import FasterWhisperProvider
+self.asr = FasterWhisperProvider(self.manager.config.asr)
+```
+
+### VAD thật: Silero VAD
+
+Cài dependency:
+
+```powershell
+python -m pip install silero-vad torch
+```
+
+Config:
+
+```yaml
+vad:
+  provider: silero
+  frame_ms: 32
+  speech_threshold: 0.55
+  min_speech_ms: 180
+  min_silence_ms: 450
+  speech_pad_ms: 180
+  max_turn_seconds: 15
+```
+
+Code VAD nằm ở:
+
+```text
+core/audio/vad.py
+```
+
+Hiện pipeline demo transcribe theo audio chunk để dễ test kết nối. Giai đoạn production cần nối flow:
+
+```text
+WebSocket audio -> audio queue -> preprocess -> VAD -> segmenter -> ASR final -> translation
+```
+
+### Dịch bằng cloud Anthropic
+
+Cài `httpx` nếu chưa có:
+
+```powershell
+python -m pip install httpx
+```
+
+Set API key:
+
+```powershell
+$env:ANTHROPIC_API_KEY="your_api_key_here"
+```
+
+Config:
+
+```yaml
+translation:
+  provider: llm_api
+  model: claude-sonnet-4-6
+  timeout_ms: 2500
+  fallback: local
+```
+
+Provider nằm ở:
+
+```text
+core/translation/llm_api.py
+```
+
+### Dịch local/offline
+
+Cài dependency:
+
+```powershell
+python -m pip install transformers sentencepiece accelerate
+```
+
+Config:
+
+```yaml
+translation:
+  provider: local
+  local_model: VietAI/envit5-translation
+```
+
+Chạy offline:
+
+```powershell
+$env:APP_PROFILE="offline"
+python -m apps.api.main
+```
+
+Provider nằm ở:
+
+```text
+core/translation/local_model.py
+```
+
+Nếu local model chưa tải được, code có rule-based fallback để app không crash, nhưng chất lượng chỉ đủ demo kỹ thuật.
+
+## 6. Kiểm Tra Trước Demo
+
+Backend:
+
+```powershell
+cd D:\Work\HackerThonFpt
+.\.venv\Scripts\Activate.ps1
+python scripts\preflight.py
+python -m apps.api.main
+```
+
+Frontend:
+
+```powershell
+cd D:\Work\HackerThonFpt\Fontend\translator-app
+npm run build
+npm run dev -- --host 0.0.0.0
+```
+
+WebSocket smoke test:
+
+```powershell
+python -c "import asyncio,json,websockets; async def main():`n async with websockets.connect('ws://127.0.0.1:5173/ws') as ws:`n  await ws.send(json.dumps({'type':'session.start','session_id':'smoke','mode':'auto'})); print(await ws.recv())`nasyncio.run(main())"
+```
+
+## 7. Tests
+
+Cài test deps:
+
+```powershell
+python -m pip install pytest pytest-asyncio
+```
+
+Chạy:
+
+```powershell
+python -m pytest
+python -m py_compile apps\api\main.py core\config.py
+```
+
+## 8. WebSocket Contract
+
+Client gửi JSON control:
 
 ```json
 {"type":"session.start","session_id":"meeting-001","mode":"auto"}
@@ -63,15 +323,15 @@ Client sends JSON control messages:
 {"type":"translation.retry","utterance_id":"utt-102"}
 ```
 
-For audio, send a JSON metadata frame immediately before each binary frame:
+Audio gửi theo cặp:
 
 ```json
 {"type":"audio.chunk_meta","session_id":"meeting-001","sequence":124,"timestamp_ms":17342,"sample_rate":16000,"channels":1,"byte_length":3200}
 ```
 
-Then send binary PCM16LE mono audio, 16kHz, chunk size 20-100ms.
+Sau đó gửi binary PCM16LE mono audio.
 
-Server event names:
+Server event:
 
 - `audio.received`
 - `speech.started`
@@ -84,63 +344,20 @@ Server event names:
 - `session.status`
 - `error`
 
-Every server event includes `session_id`, `timestamp`, `revision`, `payload`, and optional `utterance_id`.
+Mỗi event có `session_id`, `timestamp`, `revision`, `payload`, và optional `utterance_id`.
 
-## Frontend Requirements
+## 9. Backend Scope Đã Có
 
-The frontend is intentionally not implemented in this repo pass. Build it as `React + Vite + TypeScript + Tailwind`, and connect to the backend contract above.
-
-Required frontend behavior:
-
-- Use Web Audio API with `AudioWorklet`, not `ScriptProcessorNode`.
-- Capture raw mic PCM, resample to 16kHz mono, send chunks every 20-100ms.
-- Send `audio.chunk_meta` before each binary audio frame with increasing `sequence`.
-- Provide microphone selector using `navigator.mediaDevices.enumerateDevices()`.
-- Send `mic.select` when mic changes, but do not auto-switch mic during an active session.
-- Show VU meter, muted warning, and clipping warning.
-- Main layout: two columns, `ORIGINAL` on the left and `TRANSLATION` on the right.
-- Header must show session status, selected mic, active mode, and processing badge.
-- Footer controls: Pause, Push to Talk, Correct, End Meeting.
-- Manual fallback controls: Hold to Speak Vietnamese, Hold to Speak English.
-- Support modes: `auto`, `manual_vi`, `manual_en`, `seat_a`, `seat_b`.
-- Render transcript states distinctly: Listening, Transcribing, Partial, Final, Translating, Completed, Low confidence, Error.
-- Render unstable partial transcript text dim/italic using backend stable-prefix semantics.
-- Do not mutate a final transcript except after user correction via `transcript.correct`.
-- Display translation warnings from `translation.completed.payload.warnings`.
-- Badge privacy/provider clearly: local processing vs cloud translation.
-- Add Clear session, Export JSON, and Export Markdown actions.
-- Add `/debug` page outside the main UI showing backend health, queue depth, last error, p50/p95 latency, model/backend status, and network status.
-- UI must remain responsive while receiving updates every 500-800ms.
-
-## Testing
-
-```powershell
-python -m pytest
-python -m py_compile apps\api\main.py core\config.py
-```
-
-The heavyweight ASR/local translation models are lazy-loaded so the backend and tests can run before model cache warmup. Use `scripts/download_models.py` and real audio samples before production demo.
-
-## Connected Frontend
-
-The current frontend lives at `Fontend/translator-app`.
-
-Local run:
-
-```powershell
-python -m pip install fastapi "uvicorn[standard]"
-python -m apps.api.main
-cd Fontend\translator-app
-npm install
-npm run dev -- --host 0.0.0.0
-```
-
-Open `http://127.0.0.1:5173`. Vite proxies `/ws`, `/health`, and `/debug` to the backend at `http://127.0.0.1:8000`, so frontend and backend can be exposed through one public URL.
-
-Simple public sharing:
-
-```powershell
-ngrok http 5173
-```
-
-Share the HTTPS ngrok URL. On ngrok free domains, external users may see a trust/interstitial page first; after accepting it, the React app and WebSocket proxy use the same public origin.
+- FastAPI app + WebSocket.
+- Config YAML + env override.
+- Session manager, lifecycle, revision chống stale result.
+- Bounded priority queue.
+- Audio preprocessing.
+- VAD state machine.
+- Turn segmenter.
+- ASR interface, mock, faster-whisper wrapper.
+- Translation interface, Anthropic provider, local provider.
+- Entity protection, glossary, validators.
+- Circuit breaker cloud fallback.
+- SQLite transcript metadata + JSONL event log.
+- `/debug` observability route.

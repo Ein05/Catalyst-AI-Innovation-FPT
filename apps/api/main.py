@@ -35,10 +35,17 @@ def create_app() -> FastAPI:
     async def health() -> dict:
         return {"status": "ok", "profile": config.profile}
 
-    @app.websocket("/ws")
-    async def websocket_endpoint(websocket: WebSocket) -> None:
+    async def _handle_websocket(websocket: WebSocket) -> None:
         endpoint = WebSocketEndpoint(app.state.manager, app.state.storage, app.state.translation_service)
         await endpoint.handle(websocket)
+
+    @app.websocket("/ws")
+    async def websocket_endpoint(websocket: WebSocket) -> None:
+        await _handle_websocket(websocket)
+
+    @app.websocket("/ws/ws")
+    async def websocket_endpoint_compat(websocket: WebSocket) -> None:
+        await _handle_websocket(websocket)
 
     return app
 
