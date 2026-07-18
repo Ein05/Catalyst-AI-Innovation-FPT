@@ -1,0 +1,9 @@
+services:
+  api:
+    build: .
+    command: python -m apps.api.main
+    ports:
+      - "8000:8000"
+    environment:
+      APP_PROFILE: demo
+

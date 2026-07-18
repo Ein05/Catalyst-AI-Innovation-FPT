@@ -1,0 +1,8 @@
+profile: offline
+translation:
+  provider: local
+privacy:
+  mode: local_only
+  store_audio: false
+  store_transcript: true
+

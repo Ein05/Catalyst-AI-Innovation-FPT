@@ -1,0 +1,56 @@
+profile: demo
+audio:
+  sample_rate: 16000
+  channels: 1
+  high_pass_hz: 80
+  noise_suppression: false
+vad:
+  provider: silero
+  frame_ms: 32
+  speech_threshold: 0.55
+  min_speech_ms: 180
+  min_silence_ms: 450
+  speech_pad_ms: 180
+  max_turn_seconds: 15
+asr:
+  provider: faster_whisper
+  model: medium
+  device: auto
+  compute_type: auto
+  partial_interval_ms: 700
+  hardware_profiles:
+    cpu:
+      model: small
+      fallback: base
+      compute_type: int8
+    gpu_6_8gb:
+      model: medium
+      fallback: small
+      compute_type: int8_float16
+    gpu_12gb_plus:
+      model: large-v3
+      fallback: medium
+      compute_type: float16
+translation:
+  provider: llm_api
+  model: claude-sonnet-4-6
+  timeout_ms: 2500
+  fallback: local
+  local_model: VietAI/envit5-translation
+queues:
+  audio_max_items: 200
+  asr_max_items: 10
+  translation_max_items: 20
+timeouts:
+  partial_asr_ms: 1500
+  final_asr_ms: 4000
+  translation_ms: 3000
+  tts_ms: 5000
+privacy:
+  mode: ephemeral
+  store_audio: false
+  store_transcript: false
+languages:
+  vi: { display_name: Vietnamese, asr_code: vi, translation_code: vi }
+  en: { display_name: English, asr_code: en, translation_code: en }
+

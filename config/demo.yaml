@@ -1,0 +1,12 @@
+profile: demo
+asr:
+  model: small
+  device: auto
+  compute_type: auto
+translation:
+  provider: llm_api
+privacy:
+  mode: ephemeral
+  store_audio: false
+  store_transcript: true
+
