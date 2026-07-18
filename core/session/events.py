@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import Any, ClassVar, Literal, TypeAlias
 
 from pydantic import BaseModel, Field
@@ -48,7 +48,7 @@ class ServerEvent(BaseModel):
     session_id: str
     utterance_id: str | None = None
     revision: int = 0
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     payload: dict[str, Any] = Field(default_factory=dict)
 
     def serialize(self) -> dict[str, Any]:
@@ -155,4 +155,3 @@ def make_asr_payload(
         "end_ms": end_ms,
         "asr_latency_ms": asr_latency_ms,
     }
-

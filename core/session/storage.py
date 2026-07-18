@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -43,7 +43,7 @@ class SessionStorage:
         with sqlite3.connect(self.db_path) as conn:
             conn.execute(
                 "INSERT OR REPLACE INTO sessions(session_id, created_at, mode) VALUES (?, ?, ?)",
-                (session_id, datetime.now(UTC).isoformat(), mode),
+                (session_id, datetime.now(timezone.utc).isoformat(), mode),
             )
 
     def save_transcript(
@@ -55,7 +55,7 @@ class SessionStorage:
             conn.execute(
                 """INSERT INTO transcripts(session_id, utterance_id, source_text, translated_text, created_at)
                 VALUES (?, ?, ?, ?, ?)""",
-                (session_id, utterance_id, source_text, translated_text, datetime.now(UTC).isoformat()),
+                (session_id, utterance_id, source_text, translated_text, datetime.now(timezone.utc).isoformat()),
             )
 
     def append_event(self, event: ServerEvent) -> None:
@@ -90,4 +90,3 @@ class SessionStorage:
                 for row in rows
             ],
         }
-

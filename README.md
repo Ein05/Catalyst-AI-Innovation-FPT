@@ -120,3 +120,27 @@ python -m py_compile apps\api\main.py core\config.py
 ```
 
 The heavyweight ASR/local translation models are lazy-loaded so the backend and tests can run before model cache warmup. Use `scripts/download_models.py` and real audio samples before production demo.
+
+## Connected Frontend
+
+The current frontend lives at `Fontend/translator-app`.
+
+Local run:
+
+```powershell
+python -m pip install fastapi "uvicorn[standard]"
+python -m apps.api.main
+cd Fontend\translator-app
+npm install
+npm run dev -- --host 0.0.0.0
+```
+
+Open `http://127.0.0.1:5173`. Vite proxies `/ws`, `/health`, and `/debug` to the backend at `http://127.0.0.1:8000`, so frontend and backend can be exposed through one public URL.
+
+Simple public sharing:
+
+```powershell
+ngrok http 5173
+```
+
+Share the HTTPS ngrok URL. On ngrok free domains, external users may see a trust/interstitial page first; after accepting it, the React app and WebSocket proxy use the same public origin.
