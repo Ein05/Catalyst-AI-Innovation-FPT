@@ -1,55 +1,57 @@
 # Real-Time Vietnamese-English Meeting Translator
 
-Ứng dụng dịch họp thời gian thực Việt-Anh gồm:
+Backend + frontend app for a real-time Vietnamese-English meeting translator.
 
-- Backend: Python + FastAPI + WebSocket.
-- Frontend: React + Vite + TypeScript trong `Fontend/translator-app`.
-- Public sharing: dùng ngrok expose một port frontend, Vite proxy `/ws`, `/health`, `/debug` về backend.
+- Backend: Python, FastAPI, WebSocket.
+- Frontend: React, Vite, TypeScript, Tailwind.
+- Stable public deploy for demo: Render for backend, Vercel for frontend.
 
-> Trạng thái hiện tại: app đã nối frontend-backend và chạy được demo protocol. ASR thật bằng Whisper/VAD/model dịch local đã có wrapper nhưng WebSocket demo hiện đang dùng mock ASR để chạy nhẹ, không cần tải model nặng.
+Current demo mode uses `MockASRProvider` so the deployed app can run without heavy speech models. The real model wrappers are already in the repo and can be enabled later.
 
-## 1. Chạy Backend
+## Repository Layout
 
-Từ root repo:
+```text
+apps/api/                  FastAPI backend
+core/                      Backend core modules
+config/                    YAML profiles
+Fontend/translator-app/    React Vite frontend
+requirements-render.txt    Lightweight backend deps for Render demo
+render.yaml                Optional Render Blueprint config
+```
+
+## Local Backend
 
 ```powershell
 cd D:\Work\HackerThonFpt
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-python -m pip install fastapi "uvicorn[standard]" pydantic PyYAML httpx numpy scipy
+python -m pip install -r requirements-render.txt
 python -m apps.api.main
 ```
 
-Backend chạy tại:
+Backend URL:
 
 ```text
 http://127.0.0.1:8000
 ```
 
-Kiểm tra:
+Health check:
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8000/health
 ```
 
-Endpoint chính:
-
-- `GET /health`
-- `GET /debug`
-- `WS /ws`
-- `WS /ws/ws` compatibility route
-
-Nếu port `8000` bị chiếm:
+If port `8000` is busy:
 
 ```powershell
 netstat -ano | Select-String ':8000'
 Stop-Process -Id <PID_8000>
 ```
 
-## 2. Chạy Frontend
+## Local Frontend
 
-Mở terminal khác:
+Open another terminal:
 
 ```powershell
 cd D:\Work\HackerThonFpt\Fontend\translator-app
@@ -57,83 +59,172 @@ npm install
 npm run dev -- --host 0.0.0.0
 ```
 
-Frontend chạy tại:
+Frontend URL:
 
 ```text
 http://127.0.0.1:5173
 ```
 
-Vite config đã proxy:
+In local dev, Vite proxies:
 
-- `/ws` -> `ws://127.0.0.1:8000/ws`
-- `/health` -> `http://127.0.0.1:8000/health`
-- `/debug` -> `http://127.0.0.1:8000/debug`
+- `/ws` to `ws://127.0.0.1:8000/ws`
+- `/health` to `http://127.0.0.1:8000/health`
+- `/debug` to `http://127.0.0.1:8000/debug`
 
-Vì vậy frontend và backend có thể public qua một link duy nhất.
+## Deploy Backend To Render
 
-Nếu port `5173` bị chiếm:
+Render is the backend host because it supports long-running FastAPI web services and public WebSocket connections. Render web services must bind to `0.0.0.0` and should use the `PORT` env var. This app already does that in `apps/api/main.py`. Render also supports WebSockets on web services. Sources: Render Web Services docs and Render WebSocket docs.
 
-```powershell
-netstat -ano | Select-String ':5173'
-Stop-Process -Id <PID_5173>
-```
+Recommended quick deploy:
 
-## 3. Public Link Cho Người Khác Dùng
-
-Cách đơn giản nhất hiện tại là ngrok:
-
-```powershell
-ngrok http 5173
-```
-
-Ngrok sẽ in ra một HTTPS URL, ví dụ:
+1. Push this repo to GitHub.
+2. Open Render Dashboard.
+3. Create `New Web Service`.
+4. Connect the GitHub repo.
+5. Use these settings:
 
 ```text
-https://xxxx.ngrok-free.dev
+Name: meeting-translator-api
+Root Directory: leave empty
+Runtime: Python
+Build Command: python -m pip install --upgrade pip && python -m pip install -r requirements-render.txt
+Start Command: python -m apps.api.main
+Health Check Path: /health
 ```
 
-Gửi link đó cho người dùng bên thứ ba. Họ có thể vào từ máy khác, miễn là:
+Environment variables on Render:
 
-- Máy chạy app vẫn bật.
-- Backend vẫn chạy.
-- Frontend vẫn chạy.
-- Ngrok vẫn chạy.
-
-Lưu ý: ngrok free thường hiện trang cảnh báo/trust page lần đầu. Người dùng chỉ cần bấm tiếp để vào app. Mỗi lần restart ngrok free có thể đổi link.
-
-## 4. Cấu Hình Profile
-
-Config nằm trong:
-
-- `config/default.yaml`
-- `config/demo.yaml`
-- `config/offline.yaml`
-
-Chạy profile offline:
-
-```powershell
-$env:APP_PROFILE="offline"
-python -m apps.api.main
+```text
+PYTHON_VERSION=3.11.9
+APP_PROFILE=demo
 ```
 
-Override config bằng env:
+Optional, only if using cloud translation:
 
-```powershell
-$env:APP_TRANSLATION__TIMEOUT_MS="3000"
+```text
+ANTHROPIC_API_KEY=your_api_key_here
 ```
 
-## 5. Bật Model Thật
+After deploy, Render gives a backend URL like:
 
-### ASR thật: faster-whisper
+```text
+https://meeting-translator-api.onrender.com
+```
 
-Cài dependency:
+Check:
+
+```text
+https://meeting-translator-api.onrender.com/health
+```
+
+Expected:
+
+```json
+{"status":"ok","profile":"demo"}
+```
+
+WebSocket URL:
+
+```text
+wss://meeting-translator-api.onrender.com/ws
+```
+
+## Deploy Frontend To Vercel
+
+Vercel is the frontend host. Vite exposes client-side env vars only when they are prefixed with `VITE_`, so the frontend uses `VITE_API_URL` and `VITE_WS_URL`.
+
+1. Open Vercel Dashboard.
+2. Import the same GitHub repo.
+3. Set project root directory:
+
+```text
+Fontend/translator-app
+```
+
+4. Use Vercel defaults for Vite, or set manually:
+
+```text
+Framework Preset: Vite
+Build Command: npm run build
+Output Directory: dist
+Install Command: npm install
+```
+
+5. Add environment variables:
+
+```text
+VITE_API_URL=https://meeting-translator-api.onrender.com
+VITE_WS_URL=wss://meeting-translator-api.onrender.com/ws
+```
+
+Replace `meeting-translator-api.onrender.com` with your real Render backend URL.
+
+6. Deploy.
+
+Vercel gives a frontend URL like:
+
+```text
+https://translator-app.vercel.app
+```
+
+This is the public link to send to users.
+
+## Deploy Order
+
+Use this order:
+
+1. Deploy backend on Render.
+2. Open `/health` on the Render URL and confirm it returns `ok`.
+3. Copy the Render backend URL.
+4. Deploy frontend on Vercel with `VITE_API_URL` and `VITE_WS_URL`.
+5. Open the Vercel frontend URL.
+6. Click `Start Meeting`.
+
+If the frontend shows `BACKEND OFFLINE`, check these first:
+
+- `VITE_API_URL` must be the Render HTTPS URL.
+- `VITE_WS_URL` must start with `wss://`, not `ws://`.
+- Render backend might be sleeping on free plan; open `/health` once and wait for it to wake up.
+- Redeploy Vercel after changing env vars. Vite env vars are baked into the build.
+
+## Model Setup
+
+### Current Demo Mode
+
+The current deployed demo uses:
+
+```text
+MockASRProvider
+```
+
+This means:
+
+- No real Whisper model is loaded.
+- No GPU is required.
+- Render deploy is fast and cheap.
+- Audio flow and WebSocket events work for integration demo.
+
+The mock is created in:
+
+```text
+apps/api/websocket.py
+```
+
+Current line:
+
+```python
+self.asr = MockASRProvider()
+```
+
+### Enable Real ASR With faster-whisper
+
+Install model dependencies:
 
 ```powershell
-.\.venv\Scripts\Activate.ps1
 python -m pip install faster-whisper torch underthesea
 ```
 
-Model config ở `config/default.yaml`:
+Config:
 
 ```yaml
 asr:
@@ -143,40 +234,36 @@ asr:
   compute_type: auto
 ```
 
-Gợi ý model:
-
-- CPU/demo nhẹ: `small` hoặc `base`
-- GPU 6-8GB: `medium`
-- GPU 12GB+: `large-v3`
-
-Wrapper đã có ở:
+Wrapper:
 
 ```text
 core/asr/faster_whisper.py
 ```
 
-Hiện WebSocket demo đang dùng mock ASR tại:
+To switch the WebSocket demo from mock to real Whisper, replace:
 
 ```python
 self.asr = MockASRProvider()
 ```
 
-trong:
-
-```text
-apps/api/websocket.py
-```
-
-Để dùng Whisper thật, đổi sang provider factory hoặc thay bằng:
+with:
 
 ```python
 from core.asr.faster_whisper import FasterWhisperProvider
 self.asr = FasterWhisperProvider(self.manager.config.asr)
 ```
 
-### VAD thật: Silero VAD
+Model recommendations:
 
-Cài dependency:
+- CPU only: `base` or `small`
+- GPU 6-8GB: `medium`
+- GPU 12GB+: `large-v3`
+
+For Render free/cheap instances, real Whisper is not recommended. Use a GPU server or a stronger paid instance.
+
+### Enable VAD With Silero
+
+Install:
 
 ```powershell
 python -m pip install silero-vad torch
@@ -195,31 +282,33 @@ vad:
   max_turn_seconds: 15
 ```
 
-Code VAD nằm ở:
+Code:
 
 ```text
 core/audio/vad.py
 ```
 
-Hiện pipeline demo transcribe theo audio chunk để dễ test kết nối. Giai đoạn production cần nối flow:
+Production pipeline target:
 
 ```text
 WebSocket audio -> audio queue -> preprocess -> VAD -> segmenter -> ASR final -> translation
 ```
 
-### Dịch bằng cloud Anthropic
+### Enable Cloud Translation
 
-Cài `httpx` nếu chưa có:
+The Anthropic provider is implemented in:
 
-```powershell
-python -m pip install httpx
+```text
+core/translation/llm_api.py
 ```
 
-Set API key:
+Set:
 
 ```powershell
 $env:ANTHROPIC_API_KEY="your_api_key_here"
 ```
+
+On Render, add the same env var in service settings.
 
 Config:
 
@@ -231,15 +320,9 @@ translation:
   fallback: local
 ```
 
-Provider nằm ở:
+### Enable Local Translation
 
-```text
-core/translation/llm_api.py
-```
-
-### Dịch local/offline
-
-Cài dependency:
+Install:
 
 ```powershell
 python -m pip install transformers sentencepiece accelerate
@@ -253,64 +336,18 @@ translation:
   local_model: VietAI/envit5-translation
 ```
 
-Chạy offline:
+Run:
 
 ```powershell
 $env:APP_PROFILE="offline"
 python -m apps.api.main
 ```
 
-Provider nằm ở:
+Local translation is not recommended on small Render instances because model download and memory usage can be large.
 
-```text
-core/translation/local_model.py
-```
+## WebSocket Contract
 
-Nếu local model chưa tải được, code có rule-based fallback để app không crash, nhưng chất lượng chỉ đủ demo kỹ thuật.
-
-## 6. Kiểm Tra Trước Demo
-
-Backend:
-
-```powershell
-cd D:\Work\HackerThonFpt
-.\.venv\Scripts\Activate.ps1
-python scripts\preflight.py
-python -m apps.api.main
-```
-
-Frontend:
-
-```powershell
-cd D:\Work\HackerThonFpt\Fontend\translator-app
-npm run build
-npm run dev -- --host 0.0.0.0
-```
-
-WebSocket smoke test:
-
-```powershell
-python -c "import asyncio,json,websockets; async def main():`n async with websockets.connect('ws://127.0.0.1:5173/ws') as ws:`n  await ws.send(json.dumps({'type':'session.start','session_id':'smoke','mode':'auto'})); print(await ws.recv())`nasyncio.run(main())"
-```
-
-## 7. Tests
-
-Cài test deps:
-
-```powershell
-python -m pip install pytest pytest-asyncio
-```
-
-Chạy:
-
-```powershell
-python -m pytest
-python -m py_compile apps\api\main.py core\config.py
-```
-
-## 8. WebSocket Contract
-
-Client gửi JSON control:
+Client control messages:
 
 ```json
 {"type":"session.start","session_id":"meeting-001","mode":"auto"}
@@ -318,20 +355,15 @@ Client gửi JSON control:
 {"type":"session.set_mode","session_id":"meeting-001","mode":"manual_vi"}
 {"type":"turn.end","session_id":"meeting-001"}
 {"type":"mic.select","device_id":"..."}
-{"type":"glossary.update","entries":[{"source":"bien ban ghi nho","target":"memorandum of understanding","direction":"vi-en","case_sensitive":false,"category":"legal","priority":10}]}
-{"type":"transcript.correct","utterance_id":"utt-102","corrected_text":"..."}
-{"type":"translation.retry","utterance_id":"utt-102"}
 ```
 
-Audio gửi theo cặp:
+Audio is sent as JSON metadata followed by binary PCM16LE:
 
 ```json
 {"type":"audio.chunk_meta","session_id":"meeting-001","sequence":124,"timestamp_ms":17342,"sample_rate":16000,"channels":1,"byte_length":3200}
 ```
 
-Sau đó gửi binary PCM16LE mono audio.
-
-Server event:
+Server events:
 
 - `audio.received`
 - `speech.started`
@@ -344,20 +376,13 @@ Server event:
 - `session.status`
 - `error`
 
-Mỗi event có `session_id`, `timestamp`, `revision`, `payload`, và optional `utterance_id`.
+Every server event includes `session_id`, `timestamp`, `revision`, `payload`, and optional `utterance_id`.
 
-## 9. Backend Scope Đã Có
+## Tests
 
-- FastAPI app + WebSocket.
-- Config YAML + env override.
-- Session manager, lifecycle, revision chống stale result.
-- Bounded priority queue.
-- Audio preprocessing.
-- VAD state machine.
-- Turn segmenter.
-- ASR interface, mock, faster-whisper wrapper.
-- Translation interface, Anthropic provider, local provider.
-- Entity protection, glossary, validators.
-- Circuit breaker cloud fallback.
-- SQLite transcript metadata + JSONL event log.
-- `/debug` observability route.
+```powershell
+python -m pip install pytest pytest-asyncio
+python -m pytest
+python -m py_compile apps\api\main.py core\config.py
+```
+

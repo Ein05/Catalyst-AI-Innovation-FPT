@@ -20,9 +20,26 @@ type ServerEvent = {
 
 const SESSION_ID = `meeting-${Date.now()}`;
 
+function normalizeBaseUrl(value: string) {
+  return value.replace(/\/$/, '');
+}
+
+function getApiUrl(path: string) {
+  const explicit = import.meta.env.VITE_API_URL as string | undefined;
+  if (explicit) return `${normalizeBaseUrl(explicit)}${path}`;
+  return path;
+}
+
 function getWsUrl() {
   const explicit = import.meta.env.VITE_WS_URL as string | undefined;
-  if (explicit) return explicit.endsWith('/ws') ? explicit : `${explicit.replace(/\/$/, '')}/ws`;
+  const apiUrl = import.meta.env.VITE_API_URL as string | undefined;
+  const base = explicit || apiUrl;
+  if (base) {
+    const normalized = normalizeBaseUrl(base)
+      .replace(/^https:\/\//, 'wss://')
+      .replace(/^http:\/\//, 'ws://');
+    return normalized.endsWith('/ws') ? normalized : `${normalized}/ws`;
+  }
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   return `${protocol}//${window.location.host}/ws`;
 }
@@ -58,7 +75,7 @@ export default function App() {
   }, [backendOnline, connection, warnings.length]);
 
   useEffect(() => {
-    fetch('/health')
+    fetch(getApiUrl('/health'))
       .then((response) => setBackendOnline(response.ok))
       .catch(() => setBackendOnline(false));
 

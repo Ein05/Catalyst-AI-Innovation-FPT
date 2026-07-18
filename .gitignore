@@ -5,10 +5,11 @@ __pycache__/
 .venv/
 venv/
 .env
+.env.local
+.env.*.local
 data/sessions/*
 !data/sessions/.gitkeep
 data/glossary/*
 !data/glossary/.gitkeep
 models/
 .pytest_cache/
-
